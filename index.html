@@ -223,7 +223,7 @@
 
 <div class="header" style="padding-bottom:0;">
   <h1>Herramientas de Publicidad</h1>
-  <p>Celucenter</p>
+  <p>Celucenter <span style="margin-left:8px;opacity:0.5;">|</span> <span id="visitCount" style="margin-left:8px;color:#58a6ff;font-size:11px;"></span></p>
   <div class="tabs">
     <div class="tab active" data-tab="generador" onclick="switchTab('generador')">Generador</div>
     <div class="tab" data-tab="rembg" onclick="switchTab('rembg')">Quitar Fondo</div>
@@ -1032,6 +1032,12 @@ updateSliders();
 syncTxtSlidersToLayout();
 renderTemplateGrid();
 loadTemplateImage();
+
+// Visit counter
+fetch('https://api.counterapi.dev/v1/celucentermx-generador-flyers/visits/up')
+  .then(r => r.json())
+  .then(d => { document.getElementById('visitCount').textContent = d.count + ' visitas'; })
+  .catch(() => {});
 </script>
 </body>
 </html>
