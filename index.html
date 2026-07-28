@@ -509,8 +509,16 @@ const BUILTIN_TEMPLATES = [
   { name: 'verano2_story', builtin: true, path: BASE + '/plantillas/verano2_story.png' },
 ];
 
-// Custom templates added in-session (not persisted)
-let customTemplates = [];
+// Custom templates — persisted in localStorage
+let customTemplates = (() => {
+  try { return JSON.parse(localStorage.getItem('celuFlyerTemplates') || '[]'); }
+  catch { return []; }
+})();
+
+function saveCustomTemplates() {
+  try { localStorage.setItem('celuFlyerTemplates', JSON.stringify(customTemplates)); }
+  catch (e) { console.warn('localStorage lleno, no se pudo guardar plantilla:', e); }
+}
 
 function allTemplates() { return [...BUILTIN_TEMPLATES, ...customTemplates]; }
 
@@ -622,6 +630,7 @@ function uploadTemplate() {
   const reader = new FileReader();
   reader.onload = e => {
     customTemplates.push({ name, builtin: false, path: e.target.result });
+    saveCustomTemplates();
     closeUploadModal();
     renderTemplateGrid();
     switchTemplate(name);
@@ -632,6 +641,7 @@ function uploadTemplate() {
 function deleteCustomTemplate(name, event) {
   event.stopPropagation();
   customTemplates = customTemplates.filter(t => t.name !== name);
+  saveCustomTemplates();
   if (currentFormat === name) switchTemplate('cuadrado');
   renderTemplateGrid();
 }
