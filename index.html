@@ -501,12 +501,16 @@ let phonePosY = 54;
 const BASE = location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
 
 const BUILTIN_TEMPLATES = [
-  { name: 'cuadrado',        builtin: true, path: BASE + '/plantillas/cuadrado.png' },
-  { name: 'story',           builtin: true, path: BASE + '/plantillas/story.png' },
-  { name: 'verano_cuadrado', builtin: true, path: BASE + '/plantillas/verano_cuadrado.png' },
-  { name: 'verano_story',    builtin: true, path: BASE + '/plantillas/verano_story.png' },
-  { name: 'verano2_cuadrado',builtin: true, path: BASE + '/plantillas/verano2_cuadrado.png' },
-  { name: 'verano2_story',   builtin: true, path: BASE + '/plantillas/verano2_story.png' },
+  { name: 'cuadrado',          builtin: true, path: BASE + '/plantillas/cuadrado.png' },
+  { name: 'story',             builtin: true, path: BASE + '/plantillas/story.png' },
+  { name: 'verano_cuadrado',   builtin: true, path: BASE + '/plantillas/verano_cuadrado.png' },
+  { name: 'verano_story',      builtin: true, path: BASE + '/plantillas/verano_story.png' },
+  { name: 'verano2_cuadrado',  builtin: true, path: BASE + '/plantillas/verano2_cuadrado.png' },
+  { name: 'verano2_story',     builtin: true, path: BASE + '/plantillas/verano2_story.png' },
+  { name: 'regreso_cuadrado',  builtin: true, path: BASE + '/plantillas/regreso_cuadrado.png' },
+  { name: 'regreso_story',     builtin: true, path: BASE + '/plantillas/regreso_story.jpg' },
+  { name: 'regreso2_cuadrado', builtin: true, path: BASE + '/plantillas/regreso2_cuadrado.png' },
+  { name: 'regreso2_story',    builtin: true, path: BASE + '/plantillas/regreso2_story.png' },
 ];
 
 // Custom templates — persisted in localStorage (por navegador)
@@ -562,6 +566,28 @@ const LAYOUTS = {
 };
 LAYOUTS.verano2_cuadrado = LAYOUTS.verano_cuadrado;
 LAYOUTS.verano2_story = LAYOUTS.verano_story;
+
+LAYOUTS.regreso_cuadrado = {
+  phone: { x_frac: 0.03, y_center: 0.52, max_h_frac: 0.52, max_w_frac: 0.40 },
+  marca:  { x_frac: 0.54, y_frac: 0.38, size_frac: 0.048, color: '#ffffff', font: 'Arial Black' },
+  modelo: { x_frac: 0.52, y_frac: 0.45, size_frac: 0.090, color: '#ffd200', font: 'Impact' },
+  specs:  { x_frac: 0.54, y_frac: 0.63, size_frac: 0.032, color: '#ffffff', font: 'Arial Black' },
+  asolo:  { x_frac: 0.54, y_frac: 0.68, size_frac: 0.032, color: '#ffffff', font: 'Arial Black' },
+  precio: { x_frac: 0.54, y_frac: 0.73, size_frac: 0.075, color: '#ffffff', font: 'Impact',
+            badge_color: '#1a5fb4', badge_radius: 0.025, badge_px: 0.025, badge_py: 0.012 },
+};
+LAYOUTS.regreso2_cuadrado = LAYOUTS.regreso_cuadrado;
+
+LAYOUTS.regreso_story = {
+  phone: { x_frac: 0.03, y_center: 0.50, max_h_frac: 0.44, max_w_frac: 0.42 },
+  marca:  { x_frac: 0.53, y_frac: 0.38, size_frac: 0.040, color: '#ffffff', font: 'Arial Black' },
+  modelo: { x_frac: 0.51, y_frac: 0.44, size_frac: 0.078, color: '#ffd200', font: 'Impact' },
+  specs:  { x_frac: 0.53, y_frac: 0.60, size_frac: 0.028, color: '#ffffff', font: 'Arial Black' },
+  asolo:  { x_frac: 0.53, y_frac: 0.65, size_frac: 0.028, color: '#ffffff', font: 'Arial Black' },
+  precio: { x_frac: 0.53, y_frac: 0.70, size_frac: 0.062, color: '#ffffff', font: 'Impact',
+            badge_color: '#1a5fb4', badge_radius: 0.022, badge_px: 0.024, badge_py: 0.011 },
+};
+LAYOUTS.regreso2_story = LAYOUTS.regreso_story;
 
 const canvas = document.getElementById('preview');
 const ctx = canvas.getContext('2d');
