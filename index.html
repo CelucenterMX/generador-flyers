@@ -466,29 +466,14 @@
 <!-- Upload template modal -->
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
-    <h3>Agregar plantilla al repositorio</h3>
+    <h3>Agregar plantilla</h3>
     <label>Nombre</label>
     <input type="text" id="tplName" placeholder="ej: navidad, buen_fin...">
     <label>Archivo PNG/JPG</label>
     <input type="file" accept="image/png,image/jpeg,image/webp" id="tplFile" style="padding:6px; margin-bottom:0;">
-
-    <details style="margin-top:12px;">
-      <summary style="font-size:12px;color:#8b949e;cursor:pointer;">Token de GitHub (necesario para guardar)</summary>
-      <div style="margin-top:8px;">
-        <p style="font-size:11px;color:#8b949e;margin-bottom:6px;">Token con permisos <code>contents:write</code> en CelucenterMX/generador-flyers. Se guarda solo en tu navegador.</p>
-        <div style="display:flex;gap:6px;">
-          <input type="password" id="ghTokenInput" placeholder="ghp_..." style="flex:1;font-size:12px;">
-          <button class="btn-sm" onclick="saveGhToken()">Guardar</button>
-          <button class="btn-sm" onclick="clearGhToken()" style="color:#f85149;">Borrar</button>
-        </div>
-        <p id="ghTokenStatus" style="font-size:11px;margin-top:4px;"></p>
-      </div>
-    </details>
-
-    <div id="uploadStatus" style="font-size:12px;margin-top:8px;color:#8b949e;display:none;"></div>
     <div class="modal-actions">
       <button class="btn-sm" onclick="closeUploadModal()">Cancelar</button>
-      <button class="btn-action btn-cyan" id="btnUpload" style="margin-top:0;width:auto;flex:1;" onclick="uploadTemplate()">Subir al repo</button>
+      <button class="btn-action btn-cyan" style="margin-top:0;width:auto;flex:1;" onclick="uploadTemplate()">Agregar</button>
     </div>
   </div>
 </div>
@@ -515,59 +500,27 @@ let phonePosY = 54;
 // Base path — works on GitHub Pages (repo name in path) and locally
 const BASE = location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
 
-const REPO = 'CelucenterMX/generador-flyers';
-const FALLBACK_TEMPLATES = [
-  { name: 'cuadrado',        path: BASE + '/plantillas/cuadrado.png' },
-  { name: 'story',           path: BASE + '/plantillas/story.png' },
-  { name: 'verano_cuadrado', path: BASE + '/plantillas/verano_cuadrado.png' },
-  { name: 'verano_story',    path: BASE + '/plantillas/verano_story.png' },
-  { name: 'verano2_cuadrado',path: BASE + '/plantillas/verano2_cuadrado.png' },
-  { name: 'verano2_story',   path: BASE + '/plantillas/verano2_story.png' },
+const BUILTIN_TEMPLATES = [
+  { name: 'cuadrado',        builtin: true, path: BASE + '/plantillas/cuadrado.png' },
+  { name: 'story',           builtin: true, path: BASE + '/plantillas/story.png' },
+  { name: 'verano_cuadrado', builtin: true, path: BASE + '/plantillas/verano_cuadrado.png' },
+  { name: 'verano_story',    builtin: true, path: BASE + '/plantillas/verano_story.png' },
+  { name: 'verano2_cuadrado',builtin: true, path: BASE + '/plantillas/verano2_cuadrado.png' },
+  { name: 'verano2_story',   builtin: true, path: BASE + '/plantillas/verano2_story.png' },
 ];
 
-let builtinTemplates = FALLBACK_TEMPLATES.map(t => ({ ...t, builtin: true, deletable: false }));
+// Custom templates — persisted in localStorage (por navegador)
+let customTemplates = (() => {
+  try { return JSON.parse(localStorage.getItem('celuFlyerTemplates') || '[]'); }
+  catch { return []; }
+})();
 
-function allTemplates() { return builtinTemplates; }
-
-// ── GitHub token ──────────────────────────────────────────────
-function getGhToken() { return localStorage.getItem('celuGhToken') || ''; }
-function saveGhToken() {
-  const v = document.getElementById('ghTokenInput').value.trim();
-  if (!v) return;
-  localStorage.setItem('celuGhToken', v);
-  document.getElementById('ghTokenStatus').textContent = 'Token guardado.';
-  document.getElementById('ghTokenStatus').style.color = '#3fb950';
-}
-function clearGhToken() {
-  localStorage.removeItem('celuGhToken');
-  document.getElementById('ghTokenInput').value = '';
-  document.getElementById('ghTokenStatus').textContent = 'Token borrado.';
-  document.getElementById('ghTokenStatus').style.color = '#f85149';
+function saveCustomTemplates() {
+  try { localStorage.setItem('celuFlyerTemplates', JSON.stringify(customTemplates)); }
+  catch(e) { console.warn('localStorage lleno:', e); }
 }
 
-// ── Load templates dynamically from GitHub API ────────────────
-async function loadBuiltinTemplates() {
-  try {
-    const headers = {};
-    const tok = getGhToken();
-    if (tok) headers['Authorization'] = `Bearer ${tok}`;
-    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/plantillas`, { headers });
-    if (!r.ok) throw new Error('API error ' + r.status);
-    const files = await r.json();
-    const loaded = files
-      .filter(f => /\.(png|jpe?g|webp)$/i.test(f.name))
-      .map(f => ({
-        name: f.name.replace(/\.\w+$/, ''),
-        builtin: true,
-        deletable: true,
-        path: f.download_url,
-        sha: f.sha,
-      }));
-    if (loaded.length) builtinTemplates = loaded;
-  } catch(e) {
-    console.warn('No se pudo cargar plantillas desde GitHub, usando fallback:', e.message);
-  }
-}
+function allTemplates() { return [...BUILTIN_TEMPLATES, ...customTemplates]; }
 
 const LAYOUTS = {
   cuadrado: {
@@ -626,9 +579,9 @@ function renderTemplateGrid() {
       if (e.target.classList.contains('tpl-delete')) return;
       switchTemplate(t.name);
     };
-    const deleteBtn = t.deletable
-      ? `<button class="tpl-delete" onclick="deleteTemplate('${t.name}', event)">x</button>`
-      : '';
+    const deleteBtn = t.builtin
+      ? ''
+      : `<button class="tpl-delete" onclick="deleteCustomTemplate('${t.name}', event)">x</button>`;
     card.innerHTML = `
       <img src="${t.path}" alt="${t.name}">
       <div class="tpl-name">${t.name}</div>
@@ -661,124 +614,36 @@ function loadTemplateImage() {
   img.src = t.path;
 }
 
-function openUploadModal() {
-  const tok = getGhToken();
-  if (tok) {
-    document.getElementById('ghTokenInput').value = '••••••••';
-    document.getElementById('ghTokenStatus').textContent = 'Token configurado.';
-    document.getElementById('ghTokenStatus').style.color = '#3fb950';
-  }
-  document.getElementById('uploadModal').classList.add('active');
-}
+function openUploadModal() { document.getElementById('uploadModal').classList.add('active'); }
 function closeUploadModal() {
   document.getElementById('uploadModal').classList.remove('active');
   document.getElementById('tplName').value = '';
   document.getElementById('tplFile').value = '';
-  document.getElementById('uploadStatus').style.display = 'none';
-  document.getElementById('btnUpload').disabled = false;
 }
 
-async function uploadTemplate() {
-  const rawName = document.getElementById('tplName').value.trim();
-  const name = rawName.replace(/ /g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
+function uploadTemplate() {
+  const name = document.getElementById('tplName').value.trim().replace(/ /g, '_').replace(/\//g, '-');
   const file = document.getElementById('tplFile').files[0];
-  const status = document.getElementById('uploadStatus');
-  const btn = document.getElementById('btnUpload');
-
   if (!file) return alert('Selecciona un archivo');
   if (!name) return alert('Escribe un nombre');
 
-  const token = getGhToken();
-  if (!token) return alert('Configura tu token de GitHub primero (despliega la seccion de abajo).');
-
-  btn.disabled = true;
-  status.style.display = 'block';
-  status.style.color = '#8b949e';
-  status.textContent = 'Subiendo al repositorio...';
-
-  try {
-    const base64 = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload = e => res(e.target.result.replace(/^data:image\/\w+;base64,/, ''));
-      r.onerror = rej;
-      r.readAsDataURL(file);
-    });
-
-    const ext = file.name.match(/\.\w+$/)?.[0] || '.png';
-    const filePath = `plantillas/${name}${ext}`;
-
-    // Check if file already exists (to get sha for update)
-    let sha;
-    try {
-      const check = await fetch(`https://api.github.com/repos/${REPO}/contents/${filePath}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (check.ok) { sha = (await check.json()).sha; }
-    } catch {}
-
-    const body = { message: `Agregar plantilla: ${name}`, content: base64 };
-    if (sha) body.sha = sha;
-
-    const resp = await fetch(`https://api.github.com/repos/${REPO}/contents/${filePath}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new Error(err.message || `Error ${resp.status}`);
-    }
-
-    const raw = `https://raw.githubusercontent.com/${REPO}/main/${filePath}?t=${Date.now()}`;
-    builtinTemplates.push({ name, builtin: true, deletable: true, path: raw });
-
-    status.style.color = '#3fb950';
-    status.textContent = '✓ Plantilla guardada en el repo. En ~30s aparecera para todos.';
-
+  const reader = new FileReader();
+  reader.onload = e => {
+    customTemplates.push({ name, builtin: false, path: e.target.result });
+    saveCustomTemplates();
+    closeUploadModal();
     renderTemplateGrid();
     switchTemplate(name);
-
-    setTimeout(closeUploadModal, 2000);
-  } catch(e) {
-    status.style.color = '#f85149';
-    status.textContent = 'Error: ' + e.message;
-    btn.disabled = false;
-  }
+  };
+  reader.readAsDataURL(file);
 }
 
-async function deleteTemplate(name, event) {
+function deleteCustomTemplate(name, event) {
   event.stopPropagation();
-  if (!confirm(`Eliminar plantilla "${name}" del repositorio?`)) return;
-
-  const token = getGhToken();
-  if (!token) return alert('Necesitas tu token de GitHub para eliminar plantillas.');
-
-  const t = builtinTemplates.find(t => t.name === name);
-  const ext = t?.path.match(/\.\w+/)?.[0] || '.png';
-  const filePath = `plantillas/${name}${ext}`;
-
-  try {
-    // Get SHA
-    const info = await fetch(`https://api.github.com/repos/${REPO}/contents/${filePath}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!info.ok) throw new Error('No se encontro el archivo');
-    const { sha } = await info.json();
-
-    const resp = await fetch(`https://api.github.com/repos/${REPO}/contents/${filePath}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: `Eliminar plantilla: ${name}`, sha })
-    });
-    if (!resp.ok) throw new Error(`Error ${resp.status}`);
-
-    builtinTemplates = builtinTemplates.filter(t => t.name !== name);
-    if (currentFormat === name) switchTemplate('cuadrado');
-    renderTemplateGrid();
-  } catch(e) {
-    alert('Error al eliminar: ' + e.message);
-  }
+  customTemplates = customTemplates.filter(t => t.name !== name);
+  saveCustomTemplates();
+  if (currentFormat === name) switchTemplate('cuadrado');
+  renderTemplateGrid();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1173,14 +1038,10 @@ function useInGenerator() {
 // ═══════════════════════════════════════════════════════════════
 // Init
 // ═══════════════════════════════════════════════════════════════
-(async () => {
-  updateSliders();
-  syncTxtSlidersToLayout();
-  // Load templates from GitHub repo (falls back to hardcoded list on error)
-  await loadBuiltinTemplates();
-  renderTemplateGrid();
-  loadTemplateImage();
-})();
+updateSliders();
+syncTxtSlidersToLayout();
+renderTemplateGrid();
+loadTemplateImage();
 
 // Visit counter
 fetch('https://api.counterapi.dev/v1/celucentermx-generador-flyers/visits/up')
