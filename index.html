@@ -423,31 +423,39 @@
 <!-- TAB 2: Quitar Fondo -->
 <div class="tab-panel" id="panel-rembg">
 <div class="rembg-layout">
-  <div class="card" style="text-align:center; margin-bottom: 16px;">
-    <h2>Quitar fondo de imagen</h2>
-    <p style="font-size:13px; color:#8b949e; margin-bottom: 14px;">
-      Sube una foto y el sistema remueve el fondo automaticamente con IA. Ideal para fotos de equipos antes de usarlas en el generador.
+  <div class="card" style="margin-bottom: 16px;">
+    <h2 style="text-align:center; margin-bottom:8px;">Quitar fondo de imagen</h2>
+    <p style="font-size:13px; color:#8b949e; margin-bottom: 14px; text-align:center;">
+      Sube la foto, ajusta la tolerancia y haz clic en el fondo para quitarlo. Ideal para renders de equipos.
     </p>
     <div class="rembg-upload" id="rembgUploadZone">
       <input type="file" accept="image/*" id="rembgInput">
       <span class="uz-icon">+</span>
       <span class="uz-text">Arrastra o selecciona imagen (JPG, PNG)</span>
     </div>
-    <button class="btn-action btn-purple" id="btnRemoveBg" onclick="removeBg()" disabled style="max-width: 400px; margin: 10px auto 0;">
-      Quitar fondo
-    </button>
+    <div id="rembgControls" style="display:none; margin-top:12px;">
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center;">
+        <label style="font-size:12px; color:#8b949e;">Tolerancia:</label>
+        <input type="range" id="bgTolerance" min="5" max="100" value="30" style="width:140px;">
+        <span id="bgToleranceVal" style="font-size:12px; color:#e6edf3; min-width:28px;">30</span>
+        <button class="btn-sm" onclick="undoRembg()" id="btnUndo" style="background:#21262d;" disabled>↩ Deshacer</button>
+        <button class="btn-sm" onclick="resetRembg()" style="background:#21262d;">↺ Reset</button>
+      </div>
+      <p style="font-size:11px; color:#8b949e; text-align:center; margin-top:8px;">
+        Haz clic en el fondo de la imagen para quitarlo. Puedes hacer clic varias veces en distintas áreas.
+      </p>
+    </div>
   </div>
   <div class="rembg-grid">
     <div class="rembg-panel" id="rembgOrigPanel">
-      <h3>Original</h3>
-      <img id="rembgOrigImg" style="display:none;">
+      <h3>Haz clic en el fondo</h3>
+      <canvas id="rembgCanvas" style="display:none; max-width:100%; max-height:350px; cursor:crosshair; border-radius:6px;"></canvas>
       <p class="rembg-status" id="rembgOrigStatus">Sube una imagen para comenzar</p>
     </div>
     <div class="rembg-panel" id="rembgResultPanel">
       <h3>Sin fondo</h3>
-      <div class="spinner-sm" id="rembgSpinner" style="display:none;"></div>
       <div class="checker-bg" id="rembgResultBg" style="display:none;">
-        <img id="rembgResultImg">
+        <img id="rembgResultImg" style="max-width:100%; max-height:350px; border-radius:6px;">
       </div>
       <p class="rembg-status" id="rembgResultStatus">Listo para procesar</p>
       <div id="rembgActions" style="display:none; margin-top:12px; width:100%;">
@@ -981,15 +989,22 @@ function downloadCanvas() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Rembg — Background removal (client-side)
+// Rembg — Magic wand background removal (flood-fill, no AI needed)
 // ═══════════════════════════════════════════════════════════════
-let rembgFile = null;
-let rembgResultBlob = null;
+let rembgOrigImageData = null;
+let rembgCurrentImageData = null;
+let rembgHistory = [];
 let rembgResultUrl = null;
-let bgRemovalModule = null;
+let rembgFileName = '';
 
 const rembgInput = document.getElementById('rembgInput');
 const rembgZone = document.getElementById('rembgUploadZone');
+const rembgCanvas = document.getElementById('rembgCanvas');
+const rembgCtx = rembgCanvas.getContext('2d', { willReadFrequently: true });
+
+document.getElementById('bgTolerance').addEventListener('input', e => {
+  document.getElementById('bgToleranceVal').textContent = e.target.value;
+});
 
 rembgInput.addEventListener('change', e => { if (e.target.files[0]) setRembgFile(e.target.files[0]); });
 rembgZone.addEventListener('dragover', e => { e.preventDefault(); rembgZone.classList.add('dragover'); });
@@ -999,59 +1014,134 @@ rembgZone.addEventListener('drop', e => {
   if (e.dataTransfer.files[0]) setRembgFile(e.dataTransfer.files[0]);
 });
 
+rembgCanvas.addEventListener('click', e => {
+  const rect = rembgCanvas.getBoundingClientRect();
+  const scaleX = rembgCanvas.width / rect.width;
+  const scaleY = rembgCanvas.height / rect.height;
+  const x = Math.round((e.clientX - rect.left) * scaleX);
+  const y = Math.round((e.clientY - rect.top) * scaleY);
+  const tolerance = parseInt(document.getElementById('bgTolerance').value);
+  floodFillRemove(x, y, tolerance);
+});
+
 function setRembgFile(file) {
-  rembgFile = file;
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('rembgOrigImg').src = e.target.result;
-    document.getElementById('rembgOrigImg').style.display = 'block';
-    document.getElementById('rembgOrigStatus').textContent = `${file.name} (${Math.round(file.size/1024)} KB)`;
-    document.getElementById('btnRemoveBg').disabled = false;
+  rembgFileName = file.name;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    rembgCanvas.width = img.naturalWidth;
+    rembgCanvas.height = img.naturalHeight;
+    rembgCtx.drawImage(img, 0, 0);
+    rembgOrigImageData = rembgCtx.getImageData(0, 0, rembgCanvas.width, rembgCanvas.height);
+    rembgCurrentImageData = new ImageData(new Uint8ClampedArray(rembgOrigImageData.data), rembgCanvas.width, rembgCanvas.height);
+    rembgHistory = [];
+    URL.revokeObjectURL(url);
+
+    rembgCanvas.style.display = 'block';
+    document.getElementById('rembgOrigStatus').textContent = 'Haz clic en el fondo para quitarlo';
+    document.getElementById('rembgControls').style.display = 'block';
     document.getElementById('rembgResultBg').style.display = 'none';
     document.getElementById('rembgActions').style.display = 'none';
     document.getElementById('rembgResultStatus').textContent = 'Listo para procesar';
+    document.getElementById('btnUndo').disabled = true;
   };
-  reader.readAsDataURL(file);
+  img.src = url;
 }
 
-async function removeBg() {
-  if (!rembgFile) return;
-  const btn = document.getElementById('btnRemoveBg');
-  const spinner = document.getElementById('rembgSpinner');
-  const status = document.getElementById('rembgResultStatus');
+function floodFillRemove(startX, startY, tolerance) {
+  // Save history snapshot
+  rembgHistory.push(new Uint8ClampedArray(rembgCurrentImageData.data));
+  if (rembgHistory.length > 10) rembgHistory.shift();
+  document.getElementById('btnUndo').disabled = false;
 
-  btn.disabled = true;
-  spinner.style.display = 'block';
-  document.getElementById('rembgResultBg').style.display = 'none';
-  document.getElementById('rembgActions').style.display = 'none';
+  const data = rembgCurrentImageData.data;
+  const w = rembgCanvas.width, h = rembgCanvas.height;
+  const idx = (startY * w + startX) * 4;
+  const sr = data[idx], sg = data[idx+1], sb = data[idx+2];
 
-  try {
-    if (!bgRemovalModule) {
-      status.textContent = 'Descargando modelo de IA (solo la primera vez, ~40 MB)...';
-      bgRemovalModule = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/dist/index.mjs');
+  const visited = new Uint8Array(w * h);
+  const stack = [startX + startY * w];
+
+  while (stack.length) {
+    const pos = stack.pop();
+    const x = pos % w, y = Math.floor(pos / w);
+    if (x < 0 || x >= w || y < 0 || y >= h || visited[pos]) continue;
+    visited[pos] = 1;
+
+    const i = pos * 4;
+    if (data[i+3] === 0) continue; // already transparent
+
+    const dr = data[i] - sr, dg = data[i+1] - sg, db = data[i+2] - sb;
+    const dist = Math.sqrt(dr*dr + dg*dg + db*db);
+    if (dist > tolerance) continue;
+
+    // Make transparent
+    data[i+3] = 0;
+
+    stack.push(pos+1, pos-1, pos+w, pos-w);
+  }
+
+  // Feather edges slightly
+  featherEdges(data, w, h);
+
+  rembgCtx.putImageData(rembgCurrentImageData, 0, 0);
+  updateResult();
+}
+
+function featherEdges(data, w, h) {
+  // Soften hard edges by blending alpha with neighbors
+  const alpha = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) alpha[i] = data[i*4+3];
+  for (let y = 1; y < h-1; y++) {
+    for (let x = 1; x < w-1; x++) {
+      const pos = y*w+x;
+      if (alpha[pos] === 0) {
+        // Neighbor has content? Partial transparency
+        const neighbors = [alpha[pos-1], alpha[pos+1], alpha[pos-w], alpha[pos+w]];
+        const maxN = Math.max(...neighbors);
+        if (maxN > 0) data[pos*4+3] = Math.round(maxN * 0.3);
+      }
     }
-    status.textContent = 'Procesando imagen... (puede tardar unos segundos)';
-
-    const resultBlob = await bgRemovalModule.removeBackground(rembgFile);
-    rembgResultBlob = resultBlob;
-    rembgResultUrl = URL.createObjectURL(resultBlob);
-
-    document.getElementById('rembgResultImg').src = rembgResultUrl;
-    document.getElementById('rembgResultBg').style.display = 'inline-block';
-    document.getElementById('rembgActions').style.display = 'block';
-    status.textContent = 'Fondo removido correctamente';
-  } catch (e) {
-    status.textContent = 'Error: ' + e.message;
-    status.className = 'rembg-status error';
-  } finally {
-    spinner.style.display = 'none';
-    btn.disabled = false;
   }
 }
 
+function updateResult() {
+  const tmp = document.createElement('canvas');
+  tmp.width = rembgCanvas.width; tmp.height = rembgCanvas.height;
+  tmp.getContext('2d').putImageData(rembgCurrentImageData, 0, 0);
+  tmp.toBlob(blob => {
+    if (rembgResultUrl) URL.revokeObjectURL(rembgResultUrl);
+    rembgResultUrl = URL.createObjectURL(blob);
+    document.getElementById('rembgResultImg').src = rembgResultUrl;
+    document.getElementById('rembgResultBg').style.display = 'inline-block';
+    document.getElementById('rembgActions').style.display = 'block';
+    document.getElementById('rembgResultStatus').textContent = 'Fondo removido. Haz clic en más áreas si es necesario.';
+  }, 'image/png');
+}
+
+function undoRembg() {
+  if (!rembgHistory.length) return;
+  const prev = rembgHistory.pop();
+  rembgCurrentImageData.data.set(prev);
+  rembgCtx.putImageData(rembgCurrentImageData, 0, 0);
+  if (rembgHistory.length === 0) document.getElementById('btnUndo').disabled = true;
+  updateResult();
+}
+
+function resetRembg() {
+  if (!rembgOrigImageData) return;
+  rembgCurrentImageData = new ImageData(new Uint8ClampedArray(rembgOrigImageData.data), rembgCanvas.width, rembgCanvas.height);
+  rembgHistory = [];
+  rembgCtx.putImageData(rembgCurrentImageData, 0, 0);
+  document.getElementById('btnUndo').disabled = true;
+  document.getElementById('rembgResultBg').style.display = 'none';
+  document.getElementById('rembgActions').style.display = 'none';
+  document.getElementById('rembgResultStatus').textContent = 'Listo para procesar';
+}
+
 function downloadRembgResult() {
-  if (!rembgResultBlob) return;
-  const name = rembgFile ? rembgFile.name.replace(/\.\w+$/, '') + '_sin_fondo.png' : 'sin_fondo.png';
+  if (!rembgResultUrl) return;
+  const name = rembgFileName.replace(/\.\w+$/, '') + '_sin_fondo.png';
   const a = document.createElement('a'); a.href = rembgResultUrl; a.download = name; a.click();
 }
 
