@@ -1078,7 +1078,9 @@ function floodFillRemove(startX, startY, tolerance) {
     // Make transparent
     data[i+3] = 0;
 
-    stack.push(pos+1, pos-1, pos+w, pos-w);
+    if (x + 1 < w) stack.push(pos + 1);  // right (same row)
+    if (x - 1 >= 0) stack.push(pos - 1); // left  (same row)
+    stack.push(pos + w, pos - w);         // down, up
   }
 
   // Feather edges slightly
